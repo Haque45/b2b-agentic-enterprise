@@ -8,7 +8,8 @@ from dotenv import load_dotenv
 
 # Load .env file from project root if present
 env_path = Path(__file__).resolve().parent.parent / ".env"
-load_dotenv(dotenv_path=env_path)
+load_dotenv()
+load_dotenv(dotenv_path=env_path, override=True)
 
 # API Keys & Paths
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "").strip()

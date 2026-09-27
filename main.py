@@ -16,12 +16,17 @@ Usage:
     python main.py --status         # Displays current database summary
 """
 
+import os
 import sys
 import argparse
 import time
 import json
 import sqlite3
 from typing import Dict, Any
+from dotenv import load_dotenv
+
+# Initialize environment variables at script startup
+load_dotenv()
 
 from database import init_db, seed_database, get_db_connection, DEFAULT_DB_PATH
 from src.agents import (

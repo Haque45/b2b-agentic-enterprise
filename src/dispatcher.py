@@ -12,7 +12,11 @@ import random
 import logging
 import sqlite3
 from typing import Dict, Any, List, Optional
+from dotenv import load_dotenv
 import resend
+
+# Initialize environment variables at script startup
+load_dotenv()
 
 from database import get_db_connection, DEFAULT_DB_PATH
 from src.config import RESEND_API_KEY, RESEND_FROM_EMAIL
