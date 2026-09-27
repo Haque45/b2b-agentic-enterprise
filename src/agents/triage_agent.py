@@ -133,6 +133,29 @@ Output ONLY the category name. No explanations."""
             return dict(leads[0])
         return None
 
+    def is_bounce_email(self, sender: str, subject: str, body: str) -> bool:
+        """Detects automated email bouncebacks to save LLM tokens."""
+        sender_clean = (sender or "").lower()
+        subject_clean = (subject or "").lower()
+        body_clean = (body or "").lower()
+
+        bounce_senders = ["mailer-daemon", "postmaster", "bounce", "no-reply", "noreply"]
+        bounce_subjects = [
+            "undeliverable", "delivery status notification", "failure notice",
+            "mail delivery failed", "returned mail", "undelivered mail",
+            "recipient rejected", "user unknown", "address rejected"
+        ]
+
+        for bs in bounce_senders:
+            if bs in sender_clean:
+                return True
+
+        for subj_kw in bounce_subjects:
+            if subj_kw in subject_clean or subj_kw in body_clean[:250]:
+                return True
+
+        return False
+
     def run(self) -> Dict[str, Any]:
         self.log("Checking for incoming unread email replies...")
         emails_to_process = self.fetch_imap_unread_emails()
@@ -142,7 +165,7 @@ Output ONLY the category name. No explanations."""
             self.log("No live IMAP emails fetched. Checking database for mock incoming simulation...")
             conn = self.get_db()
             cursor = conn.cursor()
-            cursor.execute("SELECT * FROM leads WHERE status = 'sent' AND id NOT IN (SELECT lead_id FROM replies WHERE lead_id IS NOT NULL);")
+            cursor.execute("SELECT * FROM leads WHERE status IN ('sent', 'dispatched') AND id NOT IN (SELECT lead_id FROM replies WHERE lead_id IS NOT NULL);")
             unreplied_sent_leads = cursor.fetchall()
             conn.close()
 
@@ -176,8 +199,14 @@ Output ONLY the category name. No explanations."""
             lead_id = item.get("lead_id") or (lead_info["id"] if lead_info else None)
             service_lane = item.get("service_lane") or (lead_info["service_lane"] if lead_info else "SolidWorks DFM")
 
-            # Classify sentiment using Llama 3.1
-            sentiment = self.classify_sentiment(subj, body)
+            # Check if automated bounceback (No LLM tokens wasted)
+            if self.is_bounce_email(sender, subj, body):
+                sentiment = "Bounced"
+                new_lead_status = "bounced"
+                self.log(f"Automated email bounce detected from {sender}. Skipping LLM sentiment analysis.", level="warning")
+            else:
+                sentiment = self.classify_sentiment(subj, body)
+                new_lead_status = "replied"
 
             cursor.execute("""
                 INSERT INTO replies (lead_id, sender_email, subject, body, sentiment, service_lane)
@@ -185,7 +214,11 @@ Output ONLY the category name. No explanations."""
             """, (lead_id, sender, subj, body, sentiment, service_lane))
 
             if lead_id:
-                cursor.execute("UPDATE leads SET status = 'replied' WHERE id = ?;", (lead_id,))
+                cursor.execute("""
+                    UPDATE leads
+                    SET status = ?, updated_at = CURRENT_TIMESTAMP
+                    WHERE id = ?;
+                """, (new_lead_status, lead_id))
 
             triaged.append({
                 "lead_id": lead_id,
