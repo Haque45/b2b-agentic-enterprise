@@ -30,13 +30,24 @@ class ResendEmailDispatcher:
 
     def __init__(self, db_path: str = DEFAULT_DB_PATH, api_key: Optional[str] = None):
         self.db_path = db_path
-        self.api_key = api_key or os.environ.get("RESEND_API_KEY") or RESEND_API_KEY
-        self.from_email = RESEND_FROM_EMAIL or "Riyan <eng@muhammadriyan.tech>"
+        # Check environment variables and fallback aliases
+        key = (
+            api_key
+            or os.environ.get("RESEND_API_KEY")
+            or os.environ.get("RESEND_KEY")
+            or RESEND_API_KEY
+        )
+        self.api_key = key.strip() if key else ""
+        self.from_email = os.environ.get("RESEND_FROM_EMAIL") or RESEND_FROM_EMAIL or "Riyan <eng@muhammadriyan.tech>"
 
         if self.api_key:
             resend.api_key = self.api_key
+            logger.info(f"[Dispatcher] Initialized Resend API client with key: {self.api_key[:6]}...{self.api_key[-4:] if len(self.api_key) > 10 else ''}")
         else:
-            logger.warning("[Dispatcher] RESEND_API_KEY is not set. Operating in dry-run/mock mode.")
+            logger.warning("[Dispatcher] RESEND_API_KEY was not found in your local .env file!")
+            logger.warning("[Action Required] Add the following line to your 'd:\\Code\\B2B System\\.env' file to enable live sending:")
+            logger.warning("               RESEND_API_KEY=re_your_actual_resend_key_here")
+            logger.warning("[Dispatcher] Operating in dry-run/mock mode for safety.")
 
     def get_approved_leads(self) -> List[Dict[str, Any]]:
         """Queries pipeline.db for leads ready for dispatch."""
