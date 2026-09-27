@@ -144,9 +144,9 @@ class ResendEmailDispatcher:
                     "status": "dispatched"
                 })
 
-                # Sleep jitter between 60 and 120 seconds if more leads remain
+                # Sleep jitter: 60-120 seconds in live mode, 1 second in mock mode
                 if idx < len(approved_leads) - 1:
-                    jitter = random.randint(60, 120)
+                    jitter = random.randint(60, 120) if self.api_key else 1
                     logger.info(f"[Jitter] Sleeping for {jitter} seconds before next email dispatch...")
                     time.sleep(jitter)
             else:
