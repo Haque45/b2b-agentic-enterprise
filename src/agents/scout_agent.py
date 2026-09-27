@@ -46,6 +46,21 @@ class ScoutAgent(BaseAgent):
             "target_sectors": "Robotics, Hardware"
         }
 
+    def is_valid_b2b_lead(self, url: str, title: str, body: str) -> bool:
+        """Filters out non-B2B sites, adult domains, font downloads, and social media sites."""
+        combined = f"{url} {title} {body}".lower()
+        
+        # Blocked keywords & domain fragments
+        blocked_terms = [
+            "porn", "xxx", "jizz", "adult", "dafont", "zhihu", "hqporn",
+            "font", "wallpaper", "torrent", "bilibili", "weibo", "mp3", "video stream"
+        ]
+        
+        for term in blocked_terms:
+            if term in combined:
+                return False
+        return True
+
     def run(self) -> Dict[str, Any]:
         self.log("Reading active strategy directive from pipeline.db...")
         directive = self.get_active_directive()
@@ -71,6 +86,10 @@ class ScoutAgent(BaseAgent):
                 body = item.get("body", "").strip()
 
                 if not url or url.lower().rstrip("/") in existing_urls:
+                    continue
+
+                if not self.is_valid_b2b_lead(url, title, body):
+                    self.log(f"Skipping non-B2B or unsafe domain: {url}", level="warning")
                     continue
 
                 # Parse Company Name & Decision Maker using fast LLM reasoning (Groq Llama 3.1)

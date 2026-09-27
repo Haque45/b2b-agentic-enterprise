@@ -35,7 +35,7 @@ class LLMClient:
         self,
         prompt: str,
         system_prompt: Optional[str] = None,
-        model: str = "llama-3.1-70b-versatile",
+        model: str = "llama-3.3-70b-versatile",
         temperature: float = 0.7,
         max_tokens: int = 500
     ) -> Optional[str]:
@@ -48,8 +48,8 @@ class LLMClient:
             messages.append({"role": "system", "content": system_prompt})
         messages.append({"role": "user", "content": prompt})
 
-        # Fallback model list if 70B is unavailable or deprecated
-        models_to_try = [model, "llama-3.1-8b-instant", "llama3-70b-8192", "llama3-8b-8192"]
+        # Active Groq models
+        models_to_try = [model, "llama-3.3-70b-versatile", "llama-3.2-3b-preview", "qwen-2.5-coder-32b"]
 
         for m in models_to_try:
             try:
@@ -69,11 +69,11 @@ class LLMClient:
         self,
         prompt: str,
         system_prompt: Optional[str] = None,
-        model: str = "nousresearch/hermes-3-llama-3.1-405b:free",
+        model: str = "meta-llama/llama-3.3-70b-instruct",
         temperature: float = 0.7,
         max_tokens: int = 500
     ) -> Optional[str]:
-        """Calls OpenRouter API using python requests for Hermes 3 free tier."""
+        """Calls OpenRouter API using python requests."""
         url = "https://openrouter.ai/api/v1/chat/completions"
         headers = {
             "Content-Type": "application/json"
@@ -86,22 +86,32 @@ class LLMClient:
             messages.append({"role": "system", "content": system_prompt})
         messages.append({"role": "user", "content": prompt})
 
-        payload = {
-            "model": model,
-            "messages": messages,
-            "temperature": temperature,
-            "max_tokens": max_tokens
-        }
+        # Active OpenRouter models
+        models_to_try = [
+            model,
+            "deepseek/deepseek-r1",
+            "nousresearch/hermes-3-llama-3.1-405b",
+            "meta-llama/llama-3.1-8b-instruct"
+        ]
 
-        try:
-            resp = requests.post(url, headers=headers, json=payload, timeout=30)
-            if resp.status_code == 200:
-                data = resp.json()
-                return data["choices"][0]["message"]["content"].strip()
-            else:
-                logger.warning(f"OpenRouter status {resp.status_code}: {resp.text}")
-        except Exception as e:
-            logger.warning(f"OpenRouter API request failed: {e}")
+        for m in models_to_try:
+            payload = {
+                "model": m,
+                "messages": messages,
+                "temperature": temperature,
+                "max_tokens": max_tokens
+            }
+
+            try:
+                resp = requests.post(url, headers=headers, json=payload, timeout=30)
+                if resp.status_code == 200:
+                    data = resp.json()
+                    return data["choices"][0]["message"]["content"].strip()
+                else:
+                    logger.warning(f"OpenRouter status {resp.status_code} for model {m}: {resp.text}")
+            except Exception as e:
+                logger.warning(f"OpenRouter API request failed for model {m}: {e}")
+
         return None
 
     def complete(
@@ -120,12 +130,12 @@ class LLMClient:
         res = None
 
         if preferred_provider == "groq" or not self.openrouter_api_key:
-            m = model or "llama-3.1-70b-versatile"
+            m = model or "llama-3.3-70b-versatile"
             res = self.call_groq(prompt, system_prompt, model=m, temperature=temperature, max_tokens=max_tokens)
             if not res:
                 res = self.call_openrouter_hermes(prompt, system_prompt, temperature=temperature, max_tokens=max_tokens)
         else:
-            m = model or "nousresearch/hermes-3-llama-3.1-405b:free"
+            m = model or "meta-llama/llama-3.1-8b-instruct:free"
             res = self.call_openrouter_hermes(prompt, system_prompt, model=m, temperature=temperature, max_tokens=max_tokens)
             if not res:
                 res = self.call_groq(prompt, system_prompt, temperature=temperature, max_tokens=max_tokens)
