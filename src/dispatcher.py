@@ -7,6 +7,7 @@ enforces a 60-120 second sleep jitter between dispatches, and updates SQLite sta
 """
 
 import os
+import re
 import time
 import random
 import logging
@@ -123,9 +124,13 @@ class ResendEmailDispatcher:
             subject = lead["subject"] or f"Mechatronics Engineering for {company_name}"
             email_body = lead["email_body"] or ""
 
-            # Recipient Email Determination
-            # If lead URL/decision_maker domain gives an email, or fallback to target email format
-            recipient_email = lead.get("recipient_email") or f"contact@{company_name.lower().replace(' ', '').replace('.', '')}-sample.com"
+            # Recipient Email Determination with strict RFC sanitization
+            raw_email = lead.get("recipient_email") or ""
+            if raw_email and "@" in raw_email:
+                recipient_email = re.sub(r'[^a-zA-Z0-9@._-]', '', raw_email.strip())
+            else:
+                clean_slug = re.sub(r'[^a-zA-Z0-9]', '', company_name.lower())[:25]
+                recipient_email = f"contact@{clean_slug if clean_slug else 'tech'}-sample.com"
 
             logger.info(f"[{idx+1}/{len(approved_leads)}] Dispatching lead [ID: {lead_id}] '{company_name}' to {recipient_email}...")
 
