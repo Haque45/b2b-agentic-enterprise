@@ -32,6 +32,7 @@ from src.agents import (
     SalesAgent,
     PRAgent
 )
+from src.dispatcher import ResendEmailDispatcher
 
 
 def print_banner():
@@ -129,6 +130,7 @@ def main():
     parser = argparse.ArgumentParser(description="B2B Agentic Enterprise Orchestration Engine")
     parser.add_argument("--seed", action="store_true", help="Seeds database with initial historic leads and replies")
     parser.add_argument("--run-once", action="store_true", help="Executes a single 6-agent pipeline pass")
+    parser.add_argument("--dispatch", action="store_true", help="Dispatches approved_for_dispatch leads via Resend API")
     parser.add_argument("--loop", action="store_true", help="Runs pipeline continuously in a loop")
     parser.add_argument("--delay", type=int, default=60, help="Delay in seconds between loop cycles (default: 60s)")
     parser.add_argument("--status", action="store_true", help="Prints database summary status")
@@ -139,6 +141,13 @@ def main():
     if args.seed:
         print(f"Seeding database at {args.db}...")
         seed_database(args.db)
+        display_db_status(args.db)
+        return
+
+    if args.dispatch:
+        print(f"Dispatching approved leads via Resend API (db: {args.db})...")
+        dispatcher = ResendEmailDispatcher(db_path=args.db)
+        res = dispatcher.dispatch_pending_leads()
         display_db_status(args.db)
         return
 

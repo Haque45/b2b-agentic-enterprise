@@ -28,12 +28,18 @@ class TriageAgent(BaseAgent):
             self.log("IMAP credentials not configured. Skipping live IMAP connection.", level="warning")
             return []
 
+        folder_name = "B2B_Pipeline"
         messages = []
         try:
-            self.log(f"Connecting to IMAP server {IMAP_SERVER}:{IMAP_PORT} as {IMAP_USER}...")
+            self.log(f"Connecting to IMAP server {IMAP_SERVER}:{IMAP_PORT} as {IMAP_USER} (Folder: {folder_name})...")
             mail = imaplib.IMAP4_SSL(IMAP_SERVER, IMAP_PORT)
             mail.login(IMAP_USER, IMAP_PASSWORD)
-            mail.select("inbox")
+            
+            # CRITICAL: Strictly select and read from 'B2B_Pipeline' IMAP folder (NOT default 'INBOX')
+            status, count = mail.select(folder_name)
+            if status != 'OK':
+                self.log(f"Could not select IMAP folder '{folder_name}'. Status: {status}", level="warning")
+                return []
 
             status, data = mail.search(None, 'UNSEEN')
             if status != 'OK':

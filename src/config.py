@@ -13,6 +13,8 @@ load_dotenv(dotenv_path=env_path)
 # API Keys & Paths
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "").strip()
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "").strip()
+RESEND_API_KEY = os.getenv("RESEND_API_KEY", "").strip()
+RESEND_FROM_EMAIL = os.getenv("RESEND_FROM_EMAIL", "Riyan <eng@muhammadriyan.tech>").strip()
 DB_PATH = os.getenv("DB_PATH", "pipeline.db")
 
 # IMAP Settings
