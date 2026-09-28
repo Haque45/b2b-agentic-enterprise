@@ -60,10 +60,19 @@ class ResendEmailDispatcher:
         return [dict(row) for row in rows]
 
     def update_lead_status(self, lead_id: int, status: str, notes: Optional[str] = None) -> None:
-        """Updates SQLite status for a lead."""
+        """Updates SQLite status for a lead. Stamps last_contacted_date on dispatch."""
         conn = get_db_connection(self.db_path)
         cursor = conn.cursor()
-        if notes:
+        if status in ("dispatched", "sent"):
+            # Stamp contact date and increment follow-up counter
+            cursor.execute("""
+                UPDATE leads
+                SET status = ?, last_contacted_date = CURRENT_TIMESTAMP,
+                    follow_up_count = COALESCE(follow_up_count, 0) + 1,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE id = ?;
+            """, (status, lead_id))
+        elif notes:
             cursor.execute("""
                 UPDATE leads
                 SET status = ?, compliance_notes = ?, updated_at = CURRENT_TIMESTAMP

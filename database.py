@@ -31,6 +31,7 @@ def init_db(db_path: str = DEFAULT_DB_PATH) -> None:
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             company_name TEXT NOT NULL,
             url TEXT UNIQUE NOT NULL,
+            email TEXT UNIQUE,
             decision_maker TEXT,
             target_keyword TEXT,
             service_lane TEXT,
@@ -38,10 +39,16 @@ def init_db(db_path: str = DEFAULT_DB_PATH) -> None:
             subject TEXT,
             status TEXT NOT NULL DEFAULT 'scouted',
             compliance_notes TEXT,
+            last_contacted_date TIMESTAMP,
+            follow_up_count INTEGER DEFAULT 0,
+            source_platform TEXT DEFAULT 'web_search',
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
     """)
+
+    # Safe migration for existing databases — add new columns if missing
+    _migrate_leads_table(cursor)
 
     # 2. Campaign Directives Table
     cursor.execute("""
@@ -84,6 +91,25 @@ def init_db(db_path: str = DEFAULT_DB_PATH) -> None:
 
     conn.commit()
     conn.close()
+
+
+def _migrate_leads_table(cursor: sqlite3.Cursor) -> None:
+    """Safely adds new columns to the leads table if they don't already exist."""
+    cursor.execute("PRAGMA table_info(leads);")
+    existing_cols = {row[1] for row in cursor.fetchall()}
+
+    migrations = [
+        ("email", "TEXT"),
+        ("last_contacted_date", "TIMESTAMP"),
+        ("follow_up_count", "INTEGER DEFAULT 0"),
+        ("source_platform", "TEXT DEFAULT 'web_search'"),
+    ]
+    for col_name, col_def in migrations:
+        if col_name not in existing_cols:
+            try:
+                cursor.execute(f"ALTER TABLE leads ADD COLUMN {col_name} {col_def};")
+            except sqlite3.OperationalError:
+                pass  # Column already exists or other benign error
 
 
 def seed_database(db_path: str = DEFAULT_DB_PATH) -> None:

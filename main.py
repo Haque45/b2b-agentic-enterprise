@@ -35,7 +35,8 @@ from src.agents import (
     StrategyAgent,
     ScoutAgent,
     SalesAgent,
-    PRAgent
+    PRAgent,
+    HunterAgent,
 )
 from src.dispatcher import ResendEmailDispatcher
 
@@ -92,13 +93,52 @@ def display_db_status(db_path: str = DEFAULT_DB_PATH):
     print("====================================================================\n")
 
 
+def scan_follow_ups(db_path: str = DEFAULT_DB_PATH) -> Dict[str, Any]:
+    """
+    Temporal Follow-Up Engine.
+    Scans 'dispatched' leads where last_contacted_date is >= 4 days ago
+    AND follow_up_count < 2. Transitions them to 'needs_follow_up' so the
+    Copywriter can draft follow-up copy on the next cycle.
+    """
+    from datetime import datetime, timedelta
+
+    conn = get_db_connection(db_path)
+    cursor = conn.cursor()
+
+    cutoff = (datetime.now() - timedelta(days=4)).strftime("%Y-%m-%d %H:%M:%S")
+    cursor.execute("""
+        SELECT id, company_name, last_contacted_date, follow_up_count
+        FROM leads
+        WHERE status = 'dispatched'
+          AND last_contacted_date IS NOT NULL
+          AND last_contacted_date <= ?
+          AND COALESCE(follow_up_count, 0) < 2;
+    """, (cutoff,))
+    stale_leads = cursor.fetchall()
+
+    promoted = []
+    for lead in stale_leads:
+        cursor.execute("""
+            UPDATE leads SET status = 'needs_follow_up', updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?;
+        """, (lead["id"],))
+        promoted.append({"id": lead["id"], "company_name": lead["company_name"]})
+
+    conn.commit()
+    conn.close()
+    return {"follow_up_count": len(promoted), "leads": promoted}
+
+
 def run_pipeline_cycle(db_path: str = DEFAULT_DB_PATH) -> Dict[str, Any]:
-    """Executes 1 full pass across all 6 agents in sequence."""
+    """Executes 1 full pass across all 6 agents + follow-up scan in sequence."""
+    from datetime import datetime
+
     print_banner()
     init_db(db_path)
 
     cycle_start = time.time()
     results = {}
+    today_str = datetime.now().strftime("%Y-%m-%d")
 
     print(">>> STEP 1: Running Triage Agent (Classifying inbox replies)...")
     triage_agent = TriageAgent(db_path=db_path)
@@ -116,13 +156,25 @@ def run_pipeline_cycle(db_path: str = DEFAULT_DB_PATH) -> Dict[str, Any]:
     scout_agent = ScoutAgent(db_path=db_path)
     results["scout"] = scout_agent.run()
 
+    print("\n>>> STEP 4b: Running Hunter Agent (GitHub, HuggingFace, & B2B tool-call sourcing)...")
+    hunter_agent = HunterAgent(db_path=db_path)
+    results["hunter"] = hunter_agent.run()
+
     print("\n>>> STEP 5: Running Sales / Copywriter Agent (Scraping web & drafting grounded pitches)...")
     sales_agent = SalesAgent(db_path=db_path)
-    results["sales"] = sales_agent.run()
+    results["sales"] = sales_agent.run(current_date=today_str)
 
     print("\n>>> STEP 6: Running PR Guardian Agent (Auditing copy against spam lexicon & word limit)...")
     pr_agent = PRAgent(db_path=db_path)
     results["pr"] = pr_agent.run()
+
+    print("\n>>> STEP 7: Running Temporal Follow-Up Scan (Checking stale dispatched leads)...")
+    results["follow_ups"] = scan_follow_ups(db_path)
+    fu_count = results["follow_ups"]["follow_up_count"]
+    if fu_count > 0:
+        print(f"    [Follow-Up Engine] Promoted {fu_count} stale leads to 'needs_follow_up'.")
+    else:
+        print("    [Follow-Up Engine] No stale dispatched leads found.")
 
     duration = round(time.time() - cycle_start, 2)
     print(f"\n[PIPELINE CYCLE COMPLETE in {duration}s]")
