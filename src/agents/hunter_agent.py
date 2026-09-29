@@ -306,6 +306,65 @@ def search_google_b2b(query: str, max_results: int = 5) -> List[Dict[str, str]]:
     return results
 
 
+def search_yc_directory(query: str, max_results: int = 5) -> List[Dict[str, str]]:
+    """
+    Searches Y Combinator public company directory pages (ycombinator.com/companies
+    or workatastartup.com/companies) for startups matching query.
+    Extracts company name, website URL, and relevance note (NO personal emails).
+    """
+    from src.utils.search_engine import search_web
+
+    search_query = f"site:ycombinator.com/companies {query}"
+    raw_results = search_web(query=search_query, max_results=max_results * 2)
+    results = []
+
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) B2BYCSearch/1.0",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    }
+
+    for item in raw_results:
+        href = item.get("href", "").strip()
+        title = item.get("title", "")
+        body = item.get("body", "")[:200]
+
+        comp_name = title.split("-")[0].split("|")[0].strip()
+        comp_name = re.sub(r'(?i)\s*site:ycombinator\.com.*', '', comp_name).strip() or "YC Startup"
+
+        website_url = None
+
+        if href and not any(b in href.lower() for b in BLOCKED_DOMAINS):
+            website_url = href
+        elif href and "ycombinator.com/companies/" in href.lower():
+            try:
+                resp = requests.get(href, headers=headers, timeout=8)
+                if resp.status_code == 200:
+                    soup = BeautifulSoup(resp.text, "html.parser")
+                    for a_tag in soup.find_all("a", href=True):
+                        link = a_tag["href"].strip()
+                        if link.startswith("http") and not any(b in link.lower() for b in BLOCKED_DOMAINS):
+                            website_url = link
+                            break
+            except Exception as e:
+                logger.debug(f"[search_yc_directory] Profile fetch failed for {href}: {e}")
+
+        if not website_url:
+            continue
+
+        note = f"YC funded startup ({query}): {body}" if body else f"YC funded startup ({query})"
+
+        results.append({
+            "company_name": comp_name,
+            "url": website_url,
+            "description": note,
+            "source_platform": "ycombinator",
+        })
+        if len(results) >= max_results:
+            break
+
+    return results
+
+
 TOOL_REGISTRY = {
     "search_github_repos": {
         "fn": search_github_repos,
@@ -321,6 +380,11 @@ TOOL_REGISTRY = {
         "fn": search_google_b2b,
         "triggers": [],
         "description": "Standard web search for traditional manufacturing and B2B sites.",
+    },
+    "search_yc_directory": {
+        "fn": search_yc_directory,
+        "triggers": ["startup", "yc", "funded", "y combinator", "accelerator"],
+        "description": "Search Y Combinator directory for funded hardware/robotics startups.",
     },
     "find_business_contact": {
         "fn": find_business_contact,
