@@ -42,6 +42,7 @@ def init_db(db_path: str = DEFAULT_DB_PATH) -> None:
             last_contacted_date TIMESTAMP,
             follow_up_count INTEGER DEFAULT 0,
             source_platform TEXT DEFAULT 'web_search',
+            email_source TEXT,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
@@ -103,6 +104,7 @@ def _migrate_leads_table(cursor: sqlite3.Cursor) -> None:
         ("last_contacted_date", "TIMESTAMP"),
         ("follow_up_count", "INTEGER DEFAULT 0"),
         ("source_platform", "TEXT DEFAULT 'web_search'"),
+        ("email_source", "TEXT"),
     ]
     for col_name, col_def in migrations:
         if col_name not in existing_cols:
